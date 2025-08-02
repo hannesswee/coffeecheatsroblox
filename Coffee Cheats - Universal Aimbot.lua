@@ -1,0 +1,361 @@
+-- Coffee Cheats - Universal Aimbot with Glassmorphic UI
+-- Fully tested on Roblox
+
+-- Settings
+local fov            = 120
+local maxFOV         = 800
+local showFOV        = true
+local bodyParts      = {"Head", "Torso"}
+local selectedPartIndex = 2
+local lockPartDisplay   = bodyParts[selectedPartIndex]
+local smoothness     = 0
+local maxSmoothness  = 100
+local espEnabled     = true
+local aimbotEnabled  = false
+local currentTarget  = nil
+local uiVisible      = false
+
+-- Services
+local RunService       = game:GetService("RunService")
+local Players          = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local Camera           = workspace.CurrentCamera
+local TweenService     = game:GetService("TweenService")
+
+-- Ray params for wallcheck
+local rayParams = RaycastParams.new()
+rayParams.FilterType                   = Enum.RaycastFilterType.Blacklist
+rayParams.FilterDescendantsInstances   = {}
+
+-- FOV circle
+local circle = Drawing.new("Circle")
+circle.Transparency = 1
+circle.Color        = Color3.new(1, 0, 0)
+circle.Thickness    = 1
+circle.NumSides     = 64
+
+-- ESP setup/teardown
+local function setupESP(character)
+    if not espEnabled or not character or character:FindFirstChild("__CoffeeESP") then return end
+    local hl = Instance.new("Highlight")
+    hl.Name                = "__CoffeeESP"
+    hl.Adornee             = character
+    hl.FillColor           = Color3.new(1, 0, 0)
+    hl.OutlineColor        = Color3.new(1, 0, 0)
+    hl.FillTransparency    = 0.6
+    hl.OutlineTransparency = 0
+    hl.Parent              = character
+end
+
+local function clearESP()
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if plr.Character then
+            local hl = plr.Character:FindFirstChild("__CoffeeESP")
+            if hl and (not espEnabled or (plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health <= 0)) then
+                hl:Destroy()
+            end
+        end
+    end
+end
+
+spawn(function()
+    while wait(0.5) do
+        if espEnabled then
+            for _,plr in ipairs(Players:GetPlayers()) do
+                if plr ~= Players.LocalPlayer and plr.Character then
+                    setupESP(plr.Character)
+                end
+            end
+        end
+        clearESP()
+    end
+end)
+
+-- Target acquisition & lock-on
+local function getClosestTarget()
+    local best, sd = nil, math.huge
+    local center = Camera.ViewportSize/2
+    local origin = Camera.CFrame.Position
+    for _,plr in pairs(Players:GetPlayers()) do
+        if plr ~= Players.LocalPlayer and plr.Character then
+            local partName = (lockPartDisplay == "Torso") and "HumanoidRootPart" or lockPartDisplay
+            local part     = plr.Character:FindFirstChild(partName)
+            local hum      = plr.Character:FindFirstChild("Humanoid")
+            if part and hum and hum.Health > 0 then
+                rayParams.FilterDescendantsInstances = {Players.LocalPlayer.Character, workspace.Terrain}
+                local res = workspace:Raycast(origin, part.Position - origin, rayParams)
+                if res and res.Instance and res.Instance:IsDescendantOf(plr.Character) then
+                    local pos2d, on = Camera:WorldToViewportPoint(part.Position)
+                    local dist2d = (Vector2.new(pos2d.X, pos2d.Y) - center).Magnitude
+                    if on and dist2d <= fov and dist2d < sd then
+                        sd, best = dist2d, plr
+                    end
+                end
+            end
+        end
+    end
+    currentTarget = best
+end
+
+local function lockOn()
+    if currentTarget and currentTarget.Character then
+        local name = (lockPartDisplay == "Torso") and "HumanoidRootPart" or lockPartDisplay
+        local part = currentTarget.Character:FindFirstChild(name)
+        if part then
+            local alpha = math.clamp(1 - (smoothness / maxSmoothness), 0.01, 1)
+            Camera.CFrame = Camera.CFrame:Lerp(
+                CFrame.new(Camera.CFrame.Position, part.Position),
+                alpha
+            )
+        else
+            currentTarget = nil
+        end
+    end
+end
+
+-- RenderStepped hook for FOV circle & aimlock
+RunService.RenderStepped:Connect(function()
+    local center = Camera.ViewportSize/2
+    circle.Visible  = showFOV and aimbotEnabled
+    circle.Radius   = fov
+    circle.Position = center
+    if aimbotEnabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        if not currentTarget then getClosestTarget() end
+        if currentTarget then lockOn() end
+    else
+        currentTarget = nil
+    end
+end)
+
+-- Glassmorphic UI creation
+local function createUI()
+    -- Clean up
+    if game.CoreGui:FindFirstChild("CoffeeAimbotUI") then
+        game.CoreGui.CoffeeAimbotUI:Destroy()
+        local oldBlur = workspace.CurrentCamera:FindFirstChild("CoffeeUIBlur")
+        if oldBlur then oldBlur:Destroy() end
+    end
+
+    -- ScreenGui
+    local screen = Instance.new("ScreenGui")
+    screen.Name         = "CoffeeAimbotUI"
+    screen.ResetOnSpawn = false
+    screen.Parent       = game.CoreGui
+    screen.Enabled      = true
+
+    -- Background blur
+    local blur = Instance.new("BlurEffect", workspace.CurrentCamera)
+    blur.Name    = "CoffeeUIBlur"
+    blur.Size    = 0
+    blur.Enabled = false
+
+    -- Main panel (starts off-screen right)
+    local main = Instance.new("Frame", screen)
+    main.Name                   = "Main"
+    main.Size                   = UDim2.new(0, 320, 0, 400)
+    main.Position               = UDim2.new(1, 340, 0, 80)
+    main.AnchorPoint            = Vector2.new(1, 0)
+    main.BackgroundColor3       = Color3.fromRGB(25,25,25)
+    main.BackgroundTransparency = 0.1
+    main.BorderSizePixel        = 0
+    main.ClipsDescendants       = true
+    Instance.new("UICorner", main).CornerRadius = UDim.new(0,16)
+
+    -- Gradient overlay
+    local grad = Instance.new("UIGradient", main)
+    grad.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(40,40,40)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(20,20,20)),
+    }
+
+    -- Outline
+    local stroke = Instance.new("UIStroke", main)
+    stroke.Color        = Color3.fromRGB(255,0,0)
+    stroke.Transparency = 0.8
+    stroke.Thickness    = 2
+
+    -- Header
+    local header = Instance.new("Frame", main)
+    header.Size = UDim2.new(1,0,0,80)
+    header.BackgroundTransparency = 1
+    local logo = Instance.new("ImageLabel", header)
+    logo.Size, logo.Position = UDim2.new(0,64,0,64), UDim2.new(0,16,0,8)
+    logo.Image, logo.BackgroundTransparency = "rbxassetid://129155200827929", 1
+    local title = Instance.new("TextLabel", header)
+    title.Size, title.Position = UDim2.new(1,-96,0,36), UDim2.new(0,96,0,16)
+    title.BackgroundTransparency, title.TextColor3 = 1, Color3.fromRGB(255,0,0)
+    title.Font, title.TextSize, title.Text, title.TextXAlignment = Enum.Font.GothamBold, 24, "Coffee Cheats", Enum.TextXAlignment.Left
+    local subtitle = title:Clone()
+    subtitle.Position, subtitle.TextSize, subtitle.TextColor3, subtitle.Text = UDim2.new(0,96,0,52), 16, Color3.fromRGB(200,200,200), "Universal Aimbot"
+    subtitle.Parent = header
+
+    -- Tween setup
+    local blurOpen  = TweenService:Create(blur, TweenInfo.new(0.4, Enum.EasingStyle.Quad), {Size = 24})
+    local blurClose = TweenService:Create(blur, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {Size = 0})
+    local openTween  = TweenService:Create(main, TweenInfo.new(0.4, Enum.EasingStyle.Quad), {Position = UDim2.new(1, -340, 0, 80)})
+    local closeTween = TweenService:Create(main, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {Position = UDim2.new(1, 340, 0, 80)})
+
+    -- Play initial open
+    blur.Enabled = true
+    blurOpen:Play()
+    openTween:Play()
+    uiVisible = true
+
+    -- Draggable
+    local function makeDraggable(handle, frame)
+        local dragging, dragInput, startPos, startMousePos
+        handle.InputBegan:Connect(function(inp)
+            if inp.UserInputType==Enum.UserInputType.MouseButton1 then
+                dragging = true
+                startPos = frame.Position
+                startMousePos = inp.Position
+                inp.Changed:Connect(function()
+                    if inp.UserInputState==Enum.UserInputState.End then
+                        dragging = false
+                    end
+                end)
+            end
+        end)
+        handle.InputChanged:Connect(function(inp)
+            if inp.UserInputType==Enum.UserInputType.MouseMovement then
+                dragInput = inp
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(inp)
+            if dragging and inp==dragInput then
+                local delta = inp.Position - startMousePos
+                frame.Position = UDim2.new(
+                    startPos.X.Scale, startPos.X.Offset + delta.X,
+                    startPos.Y.Scale, startPos.Y.Offset + delta.Y
+                )
+            end
+        end)
+    end
+    makeDraggable(header, main)
+
+    -- Sliders & toggles
+    local function addSlider(y, labelText, initial, maxVal, onChange)
+        local current = initial
+        local lbl = Instance.new("TextLabel", main)
+        lbl.Size = UDim2.new(0,300,0,24)
+        lbl.Position = UDim2.new(0,10,0,y)
+        lbl.BackgroundTransparency = 1
+        lbl.TextColor3 = Color3.fromRGB(200,200,200)
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 18
+        lbl.Text = labelText..": "..current
+
+        local track = Instance.new("Frame", main)
+        track.Size = UDim2.new(0,300,0,12)
+        track.Position = UDim2.new(0,10,0,y+28)
+        track.BackgroundColor3 = Color3.fromRGB(50,50,50)
+        track.BackgroundTransparency = 0.2
+        Instance.new("UICorner", track).CornerRadius = UDim.new(0,6)
+
+        local thumb = Instance.new("Frame", track)
+        thumb.Size = UDim2.new(current/maxVal,0,1,0)
+        thumb.BackgroundColor3 = Color3.fromRGB(255,0,0)
+        Instance.new("UICorner", thumb).CornerRadius = UDim.new(0,6)
+
+        local dragging = false
+        track.InputBegan:Connect(function(i)
+            if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true end
+        end)
+        track.InputChanged:Connect(function(i)
+            if dragging and i.UserInputType==Enum.UserInputType.MouseMovement then
+                local x = math.clamp(i.Position.X - track.AbsolutePosition.X, 0, track.AbsoluteSize.X)
+                local pct = x/track.AbsoluteSize.X
+                current = math.floor(pct*maxVal)
+                onChange(current)
+                thumb.Size = UDim2.new(pct,0,1,0)
+                lbl.Text = labelText..": "..current
+            end
+        end)
+        track.InputEnded:Connect(function(i)
+            if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end
+        end)
+    end
+
+    local function addToggle(y, labelText, getter, setter)
+        local btn = Instance.new("TextButton", main)
+        btn.Size = UDim2.new(0,300,0,32)
+        btn.Position = UDim2.new(0,10,0,y)
+        btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+        btn.BackgroundTransparency = 0.3
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 18
+        btn.TextColor3 = Color3.fromRGB(200,200,200)
+        btn.AutoButtonColor = false
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0,8)
+
+        local function update()
+            local on = getter()
+            btn.Text = labelText..": "..(on and "ON" or "OFF")
+            btn.BackgroundTransparency = on and 0.1 or 0.3
+            btn.TextColor3 = on and Color3.fromRGB(255,0,0) or Color3.fromRGB(200,200,200)
+        end
+
+        btn.MouseButton1Click:Connect(function()
+            setter(not getter())
+            update()
+        end)
+        update()
+    end
+
+    -- Build controls
+    addSlider(100, "FOV", fov, maxFOV, function(v) fov = v end)
+    addSlider(160, "Smoothness", smoothness, maxSmoothness, function(v) smoothness = v end)
+    addToggle(240, "Aimlock", function() return aimbotEnabled end, function(v) aimbotEnabled = v end)
+    addToggle(290, "ESP", function() return espEnabled end, function(v) espEnabled = v end)
+
+    -- Target part button
+    local partBtn = Instance.new("TextButton", main)
+    partBtn.Size = UDim2.new(0,300,0,32)
+    partBtn.Position = UDim2.new(0,10,0,340)
+    partBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    partBtn.BackgroundTransparency = 0.3
+    partBtn.Font = Enum.Font.GothamBold
+    partBtn.TextSize = 18
+    partBtn.TextColor3 = Color3.fromRGB(200,200,200)
+    Instance.new("UICorner", partBtn).CornerRadius = UDim.new(0,8)
+    partBtn.Text = "Target: "..lockPartDisplay
+    partBtn.MouseButton1Click:Connect(function()
+        selectedPartIndex = (selectedPartIndex % #bodyParts) + 1
+        lockPartDisplay = bodyParts[selectedPartIndex]
+        partBtn.Text = "Target: "..lockPartDisplay
+    end)
+
+    -- Note label
+    local note = Instance.new("TextLabel", main)
+    note.Size = UDim2.new(1, -20, 0, 20)
+    note.Position = UDim2.new(0, 10, 1, -26)
+    note.BackgroundTransparency = 1
+    note.Text = "Toggle Menu With RightShift"
+    note.TextColor3 = Color3.fromRGB(200, 200, 200)
+    note.TextTransparency = 0.3
+    note.Font = Enum.Font.Gotham
+    note.TextSize = 14
+    note.TextXAlignment = Enum.TextXAlignment.Center
+
+    -- RightShift toggle animations
+    UserInputService.InputBegan:Connect(function(inp, gp)
+        if not gp and inp.KeyCode == Enum.KeyCode.RightShift then
+            if screen.Enabled then
+                blurClose:Play()
+                closeTween:Play()
+                delay(0.35, function()
+                    blur.Enabled = false
+                    screen.Enabled = false
+                end)
+            else
+                screen.Enabled = true
+                blur.Enabled = true
+                blurOpen:Play()
+                openTween:Play()
+            end
+        end
+    end)
+end
+
+-- Initialize
+createUI()
