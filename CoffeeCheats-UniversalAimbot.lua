@@ -113,18 +113,44 @@ local function lockOn()
     end
 end
 
+local function isTargetVisible(target)
+    if not target or not target.Character then return false end
+
+    local partName = (lockPartDisplay == "Torso") and "HumanoidRootPart" or lockPartDisplay
+    local part = target.Character:FindFirstChild(partName)
+    local hum  = target.Character:FindFirstChild("Humanoid")
+    if not part or not hum or hum.Health <= 0 then
+        return false
+    end
+
+    rayParams.FilterDescendantsInstances = {Players.LocalPlayer.Character, workspace.Terrain}
+    local origin = Camera.CFrame.Position
+    local result = workspace:Raycast(origin, part.Position - origin, rayParams)
+
+    -- If ray hits the target's character, they are visible
+    return (result and result.Instance and result.Instance:IsDescendantOf(target.Character))
+end
+
 -- RenderStepped hook for FOV circle & aimlock
 RunService.RenderStepped:Connect(function()
     local center = Camera.ViewportSize/2
     circle.Visible  = showFOV and aimbotEnabled
     circle.Radius   = fov
     circle.Position = center
-    if aimbotEnabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-        if not currentTarget then getClosestTarget() end
-        if currentTarget then lockOn() end
+if aimbotEnabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+    if currentTarget then
+        -- Cancel lock if target goes behind wall
+        if not isTargetVisible(currentTarget) then
+            currentTarget = nil
+        else
+            lockOn()
+        end
     else
-        currentTarget = nil
+        getClosestTarget()
     end
+else
+    currentTarget = nil
+end
 end)
 
 -- Glassmorphic UI creation with Tab System
@@ -466,3 +492,5 @@ end
 
 -- Init
 createUI()
+
+-- LOADSTRING: loadstring(game:HttpGet(('https://raw.githubusercontent.com/hannesswee/coffeecheatsroblox/refs/heads/main/CoffeeCheats-UniversalAimbot.lua')))()
