@@ -34,24 +34,35 @@ circle.Color        = Color3.new(1, 0, 0)
 circle.Thickness    = 1
 circle.NumSides     = 64
 
--- ESP setup/teardown
+-- ESP setup and colors
+local colors = {
+    red    = Color3.new(1, 0, 0),
+    blue   = Color3.new(0, 0, 1),
+    green  = Color3.new(0, 1, 0),
+    yellow = Color3.new(1, 1, 0),
+}
+
 local function setupESP(character)
-    if not espEnabled or not character or character:FindFirstChild("__CoffeeESP") then return end
+    if not espMode or not character or character:FindFirstChild("__GomorronESP") then return end
     local hl = Instance.new("Highlight")
-    hl.Name                = "__CoffeeESP"
-    hl.Adornee             = character
-    hl.FillColor           = Color3.new(1, 0, 0)
-    hl.OutlineColor        = Color3.new(1, 0, 0)
-    hl.FillTransparency    = 0.6
+    hl.Name = "__GomorronESP"
+    hl.Adornee = character
+    hl.FillColor = colors[espMode]
+    hl.OutlineColor = colors[espMode]
+    hl.FillTransparency = 0.6
     hl.OutlineTransparency = 0
-    hl.Parent              = character
+    hl.Parent = character
 end
 
 local function clearESP()
-    for _,plr in ipairs(Players:GetPlayers()) do
+    for _, plr in ipairs(Players:GetPlayers()) do
         if plr.Character then
-            local hl = plr.Character:FindFirstChild("__CoffeeESP")
-            if hl and (not espEnabled or (plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health <= 0)) then
+            local hl = plr.Character:FindFirstChild("__GomorronESP")
+            if hl and (
+                not espMode  -- no ESP active
+                or (plr.Character:FindFirstChild("Humanoid") 
+                    and plr.Character.Humanoid.Health <= 0) -- player is dead
+            ) then
                 hl:Destroy()
             end
         end
@@ -60,8 +71,8 @@ end
 
 spawn(function()
     while wait(0.5) do
-        if espEnabled then
-            for _,plr in ipairs(Players:GetPlayers()) do
+        if espMode then -- check color mode instead of espEnabled
+            for _, plr in ipairs(Players:GetPlayers()) do
                 if plr ~= Players.LocalPlayer and plr.Character then
                     setupESP(plr.Character)
                 end
@@ -455,7 +466,22 @@ end
         partBtn.Text = "Target: " .. lockPartDisplay
     end)
 
-    addToggle(20, "ESP", function() return espEnabled end, function(v) espEnabled = v end, espFrame)
+    -- Color toggles
+    addToggle(20, "Highlight (Red)", function() return espMode == "red" end, function(v)
+        espMode = v and "red" or nil
+    end, espFrame)
+
+    addToggle(70, "Highlight (Blue)", function() return espMode == "blue" end, function(v)
+        espMode = v and "blue" or nil
+    end, espFrame)
+
+    addToggle(120, "Highlight (Green)", function() return espMode == "green" end, function(v)
+        espMode = v and "green" or nil
+    end, espFrame)
+
+    addToggle(170, "Highlight (Yellow)", function() return espMode == "yellow" end, function(v)
+        espMode = v and "yellow" or nil
+    end, espFrame)
 
     -- Note
     local note = Instance.new("TextLabel")
