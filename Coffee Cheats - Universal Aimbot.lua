@@ -153,7 +153,7 @@ local function createUI()
     -- Main panel
     local main = Instance.new("Frame")
     main.Name = "Main"
-    main.Size = UDim2.new(0, 420, 0, 400)
+    main.Size = UDim2.new(0, 420, 0, 345)
     main.Position = UDim2.new(1, 340, 0, 80)
     main.AnchorPoint = Vector2.new(1, 0)
     main.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
